@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-ha
+  namespace: postgres-ha
+  labels:
+    app: postgres-ha
+    cluster-name: postgres-ha
+spec:
+  serviceName: postgres-ha-pods
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: postgres-ha
+      cluster-name: postgres-ha
+  template:
+    metadata:
+      labels:
+        app: postgres-ha
+        cluster-name: postgres-ha
+    spec:
+      serviceAccountName: postgres-ha
+      terminationGracePeriodSeconds: 60
+      # Prefer one Postgres pod per node (kind has 3 nodes).
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: postgres-ha
+                    cluster-name: postgres-ha
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: postgres-ha
+              cluster-name: postgres-ha
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres-patroni:16
+          imagePullPolicy: Never
+          ports:
+            - name: postgresql
+              containerPort: 5432
+            - name: patroni
+              containerPort: 8008
+          env:
+            - name: PATRONI_SCOPE
+              value: postgres-ha
+            - name: PATRONI_KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PATRONI_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SUPERUSER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-ha-credentials
+                  key: superuser-password
+            - name: REPLICATOR_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-ha-credentials
+                  key: replicator-password
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-ha-credentials
+                  key: admin-password
+            # WAL-G → MinIO
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: accesskey
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: secretkey
+            - name: AWS_ENDPOINT
+              value: http://minio.postgres-ha.svc.cluster.local:9000
+            - name: AWS_S3_FORCE_PATH_STYLE
+              value: "true"
+            - name: AWS_REGION
+              value: us-east-1
+            - name: WALG_S3_PREFIX
+              value: s3://postgres-backups/pgha
+            - name: WALG_COMPRESSION_METHOD
+              value: lz4
+            - name: USE_WALG_BACKUP
+              value: "true"
+            - name: USE_WALG_RESTORE
+              value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /readiness
+              port: patroni
+            initialDelaySeconds: 20
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /liveness
+              port: patroni
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          volumeMounts:
+            - name: pgdata
+              mountPath: /home/postgres/pgdata
+      volumes: []
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+        labels:
+          app: postgres-ha
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

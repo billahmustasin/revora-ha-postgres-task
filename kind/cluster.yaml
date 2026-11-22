@@ -1,0 +1,16 @@
+# 3-node kind cluster for realistic failover / anti-affinity demos.
+# On a real multi-zone cluster you would also set topologySpreadConstraints
+# using topology.kubernetes.io/zone (kind labels below are simulated).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: postgres-ha
+nodes:
+  - role: control-plane
+    labels:
+      topology.kubernetes.io/zone: zone-a
+  - role: worker
+    labels:
+      topology.kubernetes.io/zone: zone-b
+  - role: worker
+    labels:
+      topology.kubernetes.io/zone: zone-c

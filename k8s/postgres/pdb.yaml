@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres-ha
+  namespace: postgres-ha
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: postgres-ha
+      cluster-name: postgres-ha

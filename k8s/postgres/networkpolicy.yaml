@@ -1,0 +1,50 @@
+# Ingress restrictions for Postgres and MinIO.
+# Egress is left unrestricted so Patroni can reach the Kubernetes API (DCS)
+# without brittle CIDR exceptions on kind. Documented under Known limitations.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-ha-ingress
+  namespace: postgres-ha
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres-ha
+      cluster-name: postgres-ha
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 8008
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: minio-ingress
+  namespace: postgres-ha
+spec:
+  podSelector:
+    matchLabels:
+      app: minio
+  policyTypes:
+    - Ingress
+  ingress:
+    # Same-namespace clients (Postgres, mc bootstrap job, backup tooling)
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 9001
+    # Restore verification namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pg-restore-test
+      ports:
+        - protocol: TCP
+          port: 9000

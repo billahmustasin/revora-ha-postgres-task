@@ -1,0 +1,65 @@
+# Primary endpoint — selects the current Patroni leader via role=primary label
+# (Patroni 4.x kubernetes DCS uses primary/replica; older docs said master/replica).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-ha
+  namespace: postgres-ha
+  labels:
+    app: postgres-ha
+    role: primary
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres-ha
+    cluster-name: postgres-ha
+    role: primary
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+    - name: patroni
+      port: 8008
+      targetPort: 8008
+---
+# Stable read-only endpoint — selects replicas via Patroni role label.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-ha-replica
+  namespace: postgres-ha
+  labels:
+    app: postgres-ha
+    role: replica
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres-ha
+    cluster-name: postgres-ha
+    role: replica
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+---
+# Headless service for StatefulSet stable DNS (postgres-ha-0.postgres-ha-pods...).
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-ha-pods
+  namespace: postgres-ha
+  labels:
+    app: postgres-ha
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: postgres-ha
+    cluster-name: postgres-ha
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+    - name: patroni
+      port: 8008
+      targetPort: 8008
