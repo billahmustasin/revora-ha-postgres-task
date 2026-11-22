@@ -1,0 +1,12 @@
+.env
+k8s/postgres/secret.yaml
+*.pem
+*.key
+credentials*
+.DS_Store
+.ai-secrets/
+ai/sessions/*-SECRET*
+*.log
+.idea/
+.vscode/
+scripts/debug_*.py
