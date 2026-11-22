@@ -1,0 +1,94 @@
+# On-demand restore / PITR proof. Applied by scripts/restore-test.sh.
+# MinIO credentials Secret is created by scripts/gen-secrets.sh (not committed).
+# Set TARGET_TIME (Job env) for PITR; leave empty to recover to end of WAL.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-pitr-restore
+  namespace: pg-restore-test
+  labels:
+    app: postgres-ha
+    component: restore
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: postgres-restore
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: restore
+          image: postgres-patroni:16
+          imagePullPolicy: Never
+          env:
+            - name: TARGET_TIME
+              value: ""
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: accesskey
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: secretkey
+            - name: AWS_ENDPOINT
+              value: http://minio.postgres-ha.svc.cluster.local:9000
+            - name: AWS_S3_FORCE_PATH_STYLE
+              value: "true"
+            - name: AWS_REGION
+              value: us-east-1
+            - name: WALG_S3_PREFIX
+              value: s3://postgres-backups/pgha
+            - name: WALG_COMPRESSION_METHOD
+              value: lz4
+            - name: PGDATA
+              value: /tmp/pgdata
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              echo "Listing backups..."
+              wal-g backup-list
+              rm -rf "$PGDATA"
+              mkdir -p "$PGDATA"
+              echo "Fetching latest base backup..."
+              wal-g backup-fetch "$PGDATA" LATEST
+              touch "$PGDATA/recovery.signal"
+              # Backups may embed absolute hba_file/ident_file from the live cluster — override.
+              printf '%s\n' 'local all all trust' 'host all all 127.0.0.1/32 trust' 'host all all ::1/128 trust' > "$PGDATA/pg_hba.conf"
+              touch "$PGDATA/pg_ident.conf"
+              {
+                echo "restore_command = 'wal-g wal-fetch %f %p'"
+                echo "hba_file = '${PGDATA}/pg_hba.conf'"
+                echo "ident_file = '${PGDATA}/pg_ident.conf'"
+                echo "unix_socket_directories = '/tmp'"
+                if [[ -n "${TARGET_TIME}" ]]; then
+                  echo "recovery_target_time = '${TARGET_TIME}'"
+                  echo "PITR target: ${TARGET_TIME}"
+                fi
+                echo "recovery_target_action = 'promote'"
+              } > "$PGDATA/postgresql.auto.conf"
+              chmod 700 "$PGDATA"
+              echo "Starting PostgreSQL for verification..."
+              postgres -D "$PGDATA" -k /tmp -p 5433 &
+              PID=$!
+              for i in $(seq 1 90); do
+                if pg_isready -h /tmp -p 5433; then break; fi
+                sleep 2
+              done
+              pg_isready -h /tmp -p 5433
+              psql -h /tmp -p 5433 -U postgres -c "SELECT now(), pg_is_in_recovery();"
+              if psql -h /tmp -p 5433 -U postgres -tAc "SELECT to_regclass('public.ha_smoke');" | grep -q ha_smoke; then
+                COUNT=$(psql -h /tmp -p 5433 -U postgres -tAc "SELECT count(*) FROM ha_smoke;")
+                echo "ha_smoke rows: ${COUNT}"
+                test "${COUNT}" -ge 1
+              else
+                echo "ha_smoke not present yet — connectivity restore OK"
+              fi
+              kill "$PID" || true
+              echo "RESTORE TEST PASSED at $(date -u +%Y-%m-%dT%H:%M:%SZ)"

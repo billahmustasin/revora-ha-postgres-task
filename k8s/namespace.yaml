@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres-ha
+  labels:
+    app.kubernetes.io/name: postgres-ha
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pg-restore-test
+  labels:
+    app.kubernetes.io/name: postgres-ha-restore-test
+    purpose: backup-verification

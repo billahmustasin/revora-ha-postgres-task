@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Automated restore proof: base backup → Job in pg-restore-test → verify.
+# Optional PITR: TARGET_TIME='2026-11-20 12:00:00+00' make restore-test
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
+need kubectl
+TARGET_TIME="${TARGET_TIME:-}"
+
+log "Ensuring a base backup exists"
+"${SCRIPT_DIR}/backup-now.sh"
+
+log "Preparing pg-restore-test namespace + Secrets"
+kubectl apply -f "${ROOT}/k8s/namespace.yaml"
+"${SCRIPT_DIR}/gen-secrets.sh"
+kind load docker-image "${IMAGE}" --name "${CLUSTER_NAME}" 2>/dev/null || true
+
+kubectl -n pg-restore-test delete job postgres-pitr-restore --ignore-not-found
+# Render TARGET_TIME into the Job manifest
+TMP="$(mktemp)"
+sed "s|value: \"\"|value: \"${TARGET_TIME}\"|" "${ROOT}/k8s/backup/restore-job.yaml" > "${TMP}"
+kubectl apply -f "${TMP}"
+rm -f "${TMP}"
+
+log "Waiting for restore Job (timeout 5m)"
+kubectl -n pg-restore-test wait --for=condition=complete job/postgres-pitr-restore --timeout=300s
+kubectl -n pg-restore-test logs job/postgres-pitr-restore
+log "Restore test passed"

@@ -1,0 +1,120 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres-backup
+  namespace: postgres-ha
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: postgres-backup
+  namespace: postgres-ha
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: postgres-backup
+  namespace: postgres-ha
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: postgres-backup
+subjects:
+  - kind: ServiceAccount
+    name: postgres-backup
+    namespace: postgres-ha
+---
+# Full (base) backups every 6 hours. WAL is archived continuously via archive_command.
+# Retention: keep 7 full backups (enforced after each run).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-base-backup
+  namespace: postgres-ha
+  labels:
+    app: postgres-ha
+    component: backup
+spec:
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: postgres-ha
+            component: backup
+        spec:
+          serviceAccountName: postgres-backup
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres-patroni:16
+              imagePullPolicy: Never
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  NS=postgres-ha
+                  PRIMARY=$(kubectl get pods -n "$NS" -l app=postgres-ha,role=primary -o jsonpath='{.items[0].metadata.name}')
+                  if [[ -z "${PRIMARY}" ]]; then
+                    echo "No primary (role=primary) found" >&2
+                    exit 1
+                  fi
+                  echo "Running base backup on ${PRIMARY}"
+                  kubectl exec -n "$NS" "$PRIMARY" -c postgres -- \
+                    wal-g backup-push /home/postgres/pgdata/data
+                  echo "Enforcing retention: keep 7 full backups"
+                  kubectl exec -n "$NS" "$PRIMARY" -c postgres -- \
+                    wal-g delete retain FULL 7 --confirm
+                  kubectl exec -n "$NS" "$PRIMARY" -c postgres -- wal-g backup-list
+                  echo "Backup OK at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+---
+# Nightly schedule marker; full proof is `make restore-test` / scripts/restore-test.sh
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-restore-test
+  namespace: postgres-ha
+  labels:
+    app: postgres-ha
+    component: restore-test
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: postgres-ha
+            component: restore-test
+        spec:
+          serviceAccountName: postgres-backup
+          restartPolicy: OnFailure
+          containers:
+            - name: restore-test
+              image: postgres-patroni:16
+              imagePullPolicy: Never
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  echo "Scheduled restore reminder: run scripts/restore-test.sh (or make restore-test) for full PITR proof."
+                  kubectl get pods -n postgres-ha -l app=postgres-ha -L role
+                  exit 0
