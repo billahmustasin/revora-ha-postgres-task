@@ -35,7 +35,7 @@ kubectl version --client
 
 ```bash
 git clone <YOUR_REPO_URL>
-cd revora-ha-poostgres-task
+cd revora-ha-postgres-task
 ```
 
 ### 2. Bring the stack up
@@ -73,6 +73,7 @@ Windows:
 
 ```powershell
 kubectl -n postgres-ha get pods -o wide -L role
+.\scripts\lag.ps1
 ```
 
 You should see one pod with `role=primary` and two with `role=replica`.
@@ -87,7 +88,7 @@ make restore-test     # restore into pg-restore-test namespace
 TARGET_TIME='2026-11-21 12:00:00+00' make restore-test
 ```
 
-Windows equivalents: `.\scripts\failover-test.ps1`, `.\scripts\backup-now.ps1`, `.\scripts\restore-test.ps1`.
+Windows equivalents: `.\scripts\failover-test.ps1`, `.\scripts\backup-now.ps1`, `.\scripts\restore-test.ps1`, `.\scripts\lag.ps1`.
 
 ### 5. Tear down
 
