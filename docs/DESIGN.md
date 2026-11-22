@@ -8,11 +8,13 @@ Meet the take-home requirements with a system small enough to explain line-by-li
 
 **Choice: asynchronous** streaming replication with replication slots.
 
-| | Async (chosen) | Synchronous |
-|--|----------------|-------------|
-| RPO | Last unreplicated WAL (seconds under load) | Can be 0 to the sync standby |
-| Latency | Primary commits without waiting for replica flush | Higher commit latency; stalls if sync standby dies |
-| Local demo | Predictable on kind | Easy to wedge a 3-pod laptop cluster |
+
+|            | Async (chosen)                                    | Synchronous                                        |
+| ---------- | ------------------------------------------------- | -------------------------------------------------- |
+| RPO        | Last unreplicated WAL (seconds under load)        | Can be 0 to the sync standby                       |
+| Latency    | Primary commits without waiting for replica flush | Higher commit latency; stalls if sync standby dies |
+| Local demo | Predictable on kind                               | Easy to wedge a 3-pod laptop cluster               |
+
 
 **RPO statement:** under normal load, RPO is the replication lag reported by `pg_stat_replication` / `make lag` (bytes + `replay_lag`). We cap runaway slot retention with `max_slot_wal_keep_size=1GB` so a stuck replica cannot fill the primary disk forever.
 
@@ -40,19 +42,3 @@ Stable ClusterIP DNS names; no manual endpoint changes after failover. Connectio
 - Retention: `wal-g delete retain FULL 7 --confirm`.
 - Restore/PITR: Job in `pg-restore-test` fetches `LATEST`, sets `restore_command`, optional `recovery_target_time`.
 
-## Observability
-
-`postgres_exporter` scrapes the primary Service; Prometheus loads alert rules for scrape failure, high lag, and Patroni member down. Grafana left out intentionally.
-
-## Security (implemented vs deferred)
-
-| Implemented | Deferred / documented |
-|-------------|----------------------|
-| Random secrets via `gen-secrets` → local `.env` (gitignored) | Postgres TLS / cert-manager |
-| NetworkPolicy ingress on Postgres + MinIO | Strict egress allowlists |
-| Non-root postgres UID in image | External secret manager / SealedSecrets |
-| No credential files committed | Pod Security restricted mode |
-
-## Multi-node / multi-zone notes
-
-kind nodes carry simulated `topology.kubernetes.io/zone` labels. Pod anti-affinity prefers different hosts; topology spread uses `ScheduleAnyway`. On a real multi-zone cluster: use zone-aware volumes, `ScheduleAnyway` → `DoNotSchedule` where capacity allows, and regional object storage instead of in-cluster MinIO.
