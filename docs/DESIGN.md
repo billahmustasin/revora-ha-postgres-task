@@ -41,4 +41,22 @@ Stable ClusterIP DNS names; no manual endpoint changes after failover. Connectio
 - Full base backups: CronJob every 6h (and `make backup`) via `wal-g backup-push` on the primary.
 - Retention: `wal-g delete retain FULL 7 --confirm`.
 - Restore/PITR: Job in `pg-restore-test` fetches `LATEST`, sets `restore_command`, optional `recovery_target_time`.
+- Automated proof: `make restore-test` / `scripts/restore-test.ps1` restores into the empty `pg-restore-test` namespace and checks `ha_smoke` (credentials taken from the live primary’s WAL-G env so MinIO access matches the running cluster).
+
+## Observability
+
+`postgres_exporter` scrapes the primary Service; Prometheus loads alert rules for scrape failure, high lag, and Patroni member down. Grafana left out intentionally.
+
+## Security (implemented vs deferred)
+
+| Implemented | Deferred / documented |
+|-------------|----------------------|
+| Random secrets via `gen-secrets` → local `.env` (gitignored) | Postgres TLS / cert-manager |
+| NetworkPolicy ingress on Postgres + MinIO | Strict egress allowlists |
+| Non-root postgres UID in image | External secret manager / SealedSecrets |
+| No credential files committed | Pod Security restricted mode |
+
+## Multi-node / multi-zone notes
+
+kind nodes carry simulated `topology.kubernetes.io/zone` labels. Pod anti-affinity prefers different hosts; topology spread uses `ScheduleAnyway`. On a real multi-zone cluster: use zone-aware volumes, `ScheduleAnyway` → `DoNotSchedule` where capacity allows, and regional object storage instead of in-cluster MinIO.
 

@@ -1,9 +1,10 @@
 # Create Kubernetes Secrets from local .env (gitignored).
-# If .env is missing: copy .env.example and replace <set-me> with random values.
+# If .env is missing: copy .env.example and fill placeholders with random values.
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $EnvFile = Join-Path $Root ".env"
 $Example = Join-Path $Root ".env.example"
+$Placeholder = '<set-me>'
 
 function Log($msg) { Write-Host "==> $msg" }
 function New-Rand([int]$Len = 32) {
@@ -15,10 +16,10 @@ function New-Rand([int]$Len = 32) {
 
 if (-not (Test-Path $EnvFile)) {
   if (-not (Test-Path $Example)) { throw "Missing $Example" }
-  Log "No .env found — filling .env.example placeholders into .env (gitignored)"
+  Log "No .env found - filling .env.example placeholders into .env (gitignored)"
   $lines = Get-Content $Example | ForEach-Object {
-    if ($_ -match '<set-me>') {
-      $_ -replace '<set-me>', (New-Rand 32)
+    if ($_ -like ('*{0}*' -f $Placeholder)) {
+      $_ -replace [regex]::Escape($Placeholder), (New-Rand 32)
     } else {
       $_
     }
@@ -27,8 +28,8 @@ if (-not (Test-Path $EnvFile)) {
   Log "Wrote $EnvFile"
 }
 
-if (Select-String -Path $EnvFile -Pattern '<set-me>' -Quiet) {
-  throw ".env still contains <set-me> — set values or delete .env and re-run"
+if (Select-String -Path $EnvFile -SimpleMatch -Pattern $Placeholder -Quiet) {
+  throw ('.env still contains {0} - set values or delete .env and re-run' -f $Placeholder)
 }
 
 Get-Content $EnvFile | ForEach-Object {
