@@ -10,7 +10,12 @@ $Image = "postgres-patroni:16"
 $ClusterName = "postgres-ha"
 $Ns = "postgres-ha"
 $RestoreNs = "pg-restore-test"
-$TargetTime = if ($env:TARGET_TIME) { $env:TARGET_TIME } else { "" }
+$TargetTime = if ($env:TARGET_TIME) { $env:TARGET_TIME.Trim() } else { "" }
+if ($TargetTime) {
+  Write-Host "==> PITR TARGET_TIME=$TargetTime"
+} else {
+  Write-Host "==> No TARGET_TIME set (recover to end of WAL / LATEST)"
+}
 
 Write-Host "==> Ensuring a base backup exists"
 & "$Root\scripts\backup-now.ps1"
@@ -38,10 +43,10 @@ try {
 
 kubectl -n $RestoreNs delete job postgres-pitr-restore --ignore-not-found | Out-Null
 
-# Render TARGET_TIME into the Job manifest (first empty value: "" is TARGET_TIME).
+# Render TARGET_TIME into the Job manifest (only the TARGET_TIME empty value).
 $manifest = Get-Content "$Root\k8s\backup\restore-job.yaml" -Raw
 if ($TargetTime) {
-  $manifest = $manifest -replace 'value: ""', ("value: `"{0}`"" -f $TargetTime)
+  $manifest = $manifest -replace '(?m)(name: TARGET_TIME\r?\n\s+value: )""', ('$1"{0}"' -f $TargetTime)
 }
 $tmp = Join-Path $env:TEMP ("restore-job-{0}.yaml" -f [guid]::NewGuid().ToString("n"))
 [System.IO.File]::WriteAllText($tmp, $manifest)

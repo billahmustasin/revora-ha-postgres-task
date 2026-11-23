@@ -68,11 +68,15 @@ spec:
                 echo "ident_file = '${PGDATA}/pg_ident.conf'"
                 echo "unix_socket_directories = '/tmp'"
                 if [[ -n "${TARGET_TIME}" ]]; then
+                  # Must be valid postgresql.conf syntax (quoted timestamp).
                   echo "recovery_target_time = '${TARGET_TIME}'"
-                  echo "PITR target: ${TARGET_TIME}"
                 fi
                 echo "recovery_target_action = 'promote'"
               } > "$PGDATA/postgresql.auto.conf"
+              if [[ -n "${TARGET_TIME}" ]]; then
+                echo "PITR target: ${TARGET_TIME}"
+              fi
+
               chmod 700 "$PGDATA"
               echo "Starting PostgreSQL for verification..."
               postgres -D "$PGDATA" -k /tmp -p 5433 &
@@ -88,7 +92,7 @@ spec:
                 echo "ha_smoke rows: ${COUNT}"
                 test "${COUNT}" -ge 1
               else
-                echo "ha_smoke not present yet — connectivity restore OK"
+                echo "ha_smoke not present yet - connectivity restore OK"
               fi
               kill "$PID" || true
               echo "RESTORE TEST PASSED at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
