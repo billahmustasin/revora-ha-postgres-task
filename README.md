@@ -88,12 +88,18 @@ make restore-test     # restore into pg-restore-test namespace
 TARGET_TIME='2026-11-21 12:00:00+00' make restore-test
 ```
 
-Windows equivalents: `.\scripts\failover-test.ps1`, `.\scripts\backup-now.ps1`, `.\scripts\restore-test.ps1`, `.\scripts\lag.ps1`.
+Windows equivalents: `.\scripts\up.ps1`, `.\scripts\down.ps1`, `.\scripts\failover-test.ps1`, `.\scripts\backup-now.ps1`, `.\scripts\restore-test.ps1`, `.\scripts\lag.ps1`.
 
 ### 5. Tear down
 
 ```bash
-make down             # or: .\scripts\down.sh
+make down
+```
+
+Windows:
+
+```powershell
+.\scripts\down.ps1
 ```
 
 Deletes the app namespaces and the kind cluster.

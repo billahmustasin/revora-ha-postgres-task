@@ -10,3 +10,5 @@ ai/sessions/*-SECRET*
 .idea/
 .vscode/
 scripts/debug_*.py
+# Accidental empty file from Windows `make lag` / shell quirks
+scripts/lag
