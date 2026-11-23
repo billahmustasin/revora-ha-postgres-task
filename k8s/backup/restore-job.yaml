@@ -67,6 +67,10 @@ spec:
                 echo "hba_file = '${PGDATA}/pg_hba.conf'"
                 echo "ident_file = '${PGDATA}/pg_ident.conf'"
                 echo "unix_socket_directories = '/tmp'"
+                # Scratch restore must NOT wal-push into the live MinIO prefix
+                # (promoted timelines would pollute history and break later restores).
+                echo "archive_mode = off"
+                echo "archive_command = '/bin/true'"
                 if [[ -n "${TARGET_TIME}" ]]; then
                   # Must be valid postgresql.conf syntax (quoted timestamp).
                   echo "recovery_target_time = '${TARGET_TIME}'"
