@@ -94,7 +94,7 @@ PITR on Windows (timestamp must be **after** an existing base backup, in UTC):
 
 ```powershell
 .\scripts\backup-now.ps1
-$env:TARGET_TIME = '2026-11-23 16:40:00+00'   # later than that backup's modified time
+$env:TARGET_TIME = '2026-11-23 16:40:00+00'   # after that backup, not in the future
 .\scripts\restore-test.ps1
 Remove-Item Env:TARGET_TIME
 ```
