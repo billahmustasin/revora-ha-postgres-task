@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Automated restore proof: base backup → Job in pg-restore-test → verify.
-# Optional PITR: TARGET_TIME='2026-11-20 12:00:00+00' make restore-test
+# Optional PITR: take a backup first, then
+# TARGET_TIME='2026-11-23 16:40:00+00' make restore-test
+# TARGET_TIME must be after that backup and within archived WAL.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
@@ -9,8 +11,13 @@ source "${SCRIPT_DIR}/lib.sh"
 need kubectl
 TARGET_TIME="${TARGET_TIME:-}"
 
-log "Ensuring a base backup exists"
-"${SCRIPT_DIR}/backup-now.sh"
+if [[ -n "${TARGET_TIME}" ]]; then
+  log "PITR: using existing backups (not taking a newer base backup)"
+  log "TARGET_TIME must be after the latest base backup and within archived WAL"
+else
+  log "Ensuring a base backup exists"
+  "${SCRIPT_DIR}/backup-now.sh"
+fi
 
 log "Preparing pg-restore-test namespace + MinIO credentials"
 kubectl apply -f "${ROOT}/k8s/namespace.yaml"

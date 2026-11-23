@@ -47,8 +47,8 @@ make backup
 # Latest
 make restore-test
 
-# Point-in-time
-TARGET_TIME='2026-11-21 12:00:00+00' make restore-test
+# Point-in-time (do not take a newer backup after choosing the timestamp)
+TARGET_TIME='2026-11-23 16:40:00+00' make restore-test
 ```
 
 The Job runs in `pg-restore-test`, fetches base backup + WAL from MinIO, starts Postgres temporarily, and checks `ha_smoke` if present. Scripts copy MinIO credentials from the live primary’s WAL-G environment so the scratch restore uses the same keys as ongoing backups.

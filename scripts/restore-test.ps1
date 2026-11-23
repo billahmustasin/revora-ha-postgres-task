@@ -1,8 +1,12 @@
 # Automated restore proof: base backup → Job in pg-restore-test → verify.
 # Usage:
 #   .\scripts\restore-test.ps1
-# Optional PITR:
-#   $env:TARGET_TIME = '2026-11-21 12:00:00+00'; .\scripts\restore-test.ps1
+# Optional PITR (timestamp must be AFTER an existing base backup, covered by archived WAL):
+#   .\scripts\backup-now.ps1
+#   # wait, then pick UTC after that backup's modified time
+#   $env:TARGET_TIME = '2026-11-23 16:40:00+00'
+#   .\scripts\restore-test.ps1
+#   Remove-Item Env:TARGET_TIME
 $ErrorActionPreference = "Stop"
 $env:Path = "$env:USERPROFILE\bin;$env:Path"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -17,8 +21,13 @@ if ($TargetTime) {
   Write-Host "==> No TARGET_TIME set (recover to end of WAL / LATEST)"
 }
 
-Write-Host "==> Ensuring a base backup exists"
-& "$Root\scripts\backup-now.ps1"
+if ($TargetTime) {
+  Write-Host "==> PITR: using existing backups (not taking a newer base backup)"
+  Write-Host "    TARGET_TIME must be after the latest base backup and within archived WAL"
+} else {
+  Write-Host "==> Ensuring a base backup exists"
+  & "$Root\scripts\backup-now.ps1"
+}
 
 Write-Host "==> Preparing $RestoreNs namespace + MinIO credentials"
 kubectl apply -f "$Root\k8s\namespace.yaml" | Out-Null
