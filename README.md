@@ -84,11 +84,20 @@ You should see one pod with `role=primary` and two with `role=replica`.
 make failover-test    # kill primary, print RTO, wait for rejoin
 make backup           # WAL-G base backup to MinIO
 make restore-test     # restore into pg-restore-test namespace
-# Optional PITR:
-TARGET_TIME='2026-11-21 12:00:00+00' make restore-test
+# Optional PITR (after a base backup exists; time must be later than that backup):
+TARGET_TIME='2026-11-23 16:40:00+00' make restore-test
 ```
 
 Windows equivalents: `.\scripts\up.ps1`, `.\scripts\down.ps1`, `.\scripts\failover-test.ps1`, `.\scripts\backup-now.ps1`, `.\scripts\restore-test.ps1`, `.\scripts\lag.ps1`.
+
+PITR on Windows (timestamp must be **after** an existing base backup, in UTC):
+
+```powershell
+.\scripts\backup-now.ps1
+$env:TARGET_TIME = '2026-11-23 16:40:00+00'   # after that backup, not in the future
+.\scripts\restore-test.ps1
+Remove-Item Env:TARGET_TIME
+```
 
 ### 5. Tear down
 
